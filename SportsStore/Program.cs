@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using SportsStore.Models;
-
 using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,7 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllersWithViews();
 
 builder.Services.AddDbContext<StoreDbContext>(opts => {
-    opts.UseSqlServer(
+    opts.UseSqlite(
         builder.Configuration["ConnectionStrings:SportsStoreConnection"]);
 });
 
@@ -23,7 +22,7 @@ builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddServerSideBlazor();
 
 builder.Services.AddDbContext<AppIdentityDbContext>(options =>
-    options.UseSqlServer(
+    options.UseSqlite(
         builder.Configuration["ConnectionStrings:IdentityConnection"]));
 
 builder.Services.AddIdentity<IdentityUser, IdentityRole>()
@@ -43,7 +42,6 @@ app.UseRequestLocalization(opts => {
 
 app.UseStaticFiles();
 app.UseSession();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
