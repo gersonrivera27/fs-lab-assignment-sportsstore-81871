@@ -42,7 +42,7 @@ namespace SportsStore.Controllers {
         }
 
         [HttpPost]
-        public IActionResult Checkout(Order order, string paymentIntentId) {
+        public IActionResult Checkout(Order order, string? paymentIntentId) {
             if (cart.Lines.Count() == 0) {
                 ModelState.AddModelError("", "Sorry, your cart is empty!");
             }
