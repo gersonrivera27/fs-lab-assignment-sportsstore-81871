@@ -23,6 +23,8 @@ namespace SportsStore.Infrastructure
         {
             try
             {
+                Log.Information("Initiating Stripe PaymentIntent creation for {Amount} cents ({Currency})", (long)(amount * 100), "usd");
+
                 var options = new PaymentIntentCreateOptions
                 {
                     Amount = (long)(amount * 100), // Stripe expects amount in cents
@@ -33,16 +35,17 @@ namespace SportsStore.Infrastructure
                 var service = new PaymentIntentService();
                 var paymentIntent = service.Create(options);
 
+                Log.Information("Stripe PaymentIntent {PaymentIntentId} created successfully for {Amount} cents", paymentIntent.Id, paymentIntent.Amount);
                 return paymentIntent.ClientSecret;
             }
             catch (StripeException e)
             {
-                Log.Error(e, "Stripe API error occurred while creating PaymentIntent");
+                Log.Error(e, "Stripe API error: {StripeError}, Code: {ErrorCode}", e.Message, e.StripeError?.Code);
                 return null;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "An unexpected error occurred while creating PaymentIntent");
+                Log.Error(ex, "Unexpected error creating PaymentIntent for amount {Amount}", amount);
                 return null;
             }
         }
