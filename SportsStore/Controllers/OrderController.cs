@@ -22,10 +22,12 @@ namespace SportsStore.Controllers {
         public ViewResult Checkout()
         {
             ViewBag.StripePublishableKey = configuration["Stripe:PublishableKey"];
+            Log.Information("Stripe Publishable Key configured: {KeyPresent}", !string.IsNullOrEmpty(configuration["Stripe:PublishableKey"]));
             return View(new Order());
         }
 
         [HttpPost]
+        [Route("Order/CreatePaymentIntent")]
         public IActionResult CreatePaymentIntent()
         {
             var total = cart.ComputeTotalValue();

@@ -27,10 +27,7 @@ namespace SportsStore.Infrastructure
                 {
                     Amount = (long)(amount * 100), // Stripe expects amount in cents
                     Currency = "usd",
-                    AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
-                    {
-                        Enabled = true,
-                    },
+                    PaymentMethodTypes = new List<string> { "card" },
                 };
 
                 var service = new PaymentIntentService();
