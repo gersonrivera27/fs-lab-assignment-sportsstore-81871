@@ -10,6 +10,9 @@ namespace SportsStore.Models {
         [BindNever]
         public ICollection<CartLine> Lines { get; set; } = new List<CartLine>();
 
+        [BindNever]
+        public string? PaymentIntentId { get; set; }
+
         [Required(ErrorMessage = "Please enter a name")]
         public string? Name { get; set; }
 

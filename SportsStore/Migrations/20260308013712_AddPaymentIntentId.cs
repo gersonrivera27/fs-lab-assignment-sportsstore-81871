@@ -4,22 +4,24 @@
 
 namespace SportsStore.Migrations
 {
-    public partial class ShippedOrders : Migration
+    /// <inheritdoc />
+    public partial class AddPaymentIntentId : Migration
     {
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "Shipped",
+            migrationBuilder.AddColumn<string>(
+                name: "PaymentIntentId",
                 table: "Orders",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+                type: "TEXT",
+                nullable: true);
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Shipped",
+                name: "PaymentIntentId",
                 table: "Orders");
         }
     }
