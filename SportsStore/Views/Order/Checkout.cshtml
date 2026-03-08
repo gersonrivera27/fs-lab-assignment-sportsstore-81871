@@ -5,10 +5,10 @@
 
 <div asp-validation-summary="All" class="text-danger"></div>
 
-<form asp-action="Checkout" method="post">
+<form asp-action="Checkout" method="post" id="payment-form">
     <h3>Ship to</h3>
     <div class="form-group">
-        <label>Name:</label><input asp-for="Name" class="form-control" />
+        <label>Name:</label><input asp-for="Name" class="form-control" id="Name" />
     </div>
     <h3>Address</h3>
     <div class="form-group">
@@ -38,7 +38,103 @@
             <input asp-for="GiftWrap" /> Gift wrap these items
         </label>
     </div>
-    <div class="text-center">
-        <input class="btn btn-primary" type="submit" value="Complete Order" />
+
+    <h3>Payment</h3>
+    <div class="form-group">
+        <label for="card-element">Credit or debit card</label>
+        <div id="card-element" class="form-control" style="padding: 10px;">
+            <!-- A Stripe Element will be inserted here. -->
+        </div>
+        <!-- Used to display form errors. -->
+        <div id="card-errors" role="alert" class="text-danger mt-2"></div>
+    </div>
+    
+    <input type="hidden" id="paymentIntentId" name="paymentIntentId" />
+
+    <div class="text-center mt-3">
+        <input class="btn btn-primary" type="submit" value="Complete Order" id="submit-button" />
     </div>
 </form>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    var stripe = Stripe('@ViewBag.StripePublishableKey');
+    var elements = stripe.elements();
+    
+    var style = {
+        base: {
+            color: '#32325d',
+            fontFamily: '"Helvetica Neue", Helvetica, sans-serif',
+            fontSmoothing: 'antialiased',
+            fontSize: '16px',
+            '::placeholder': {
+                color: '#aab7c4'
+            }
+        },
+        invalid: {
+            color: '#fa755a',
+            iconColor: '#fa755a'
+        }
+    };
+    
+    var card = elements.create('card', {style: style});
+    card.mount('#card-element');
+    
+    card.on('change', function(event) {
+        var displayError = document.getElementById('card-errors');
+        if (event.error) {
+            displayError.textContent = event.error.message;
+        } else {
+            displayError.textContent = '';
+        }
+    });
+    
+    var form = document.getElementById('payment-form');
+    var submitButton = document.getElementById('submit-button');
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        submitButton.disabled = true;
+
+        fetch('/Order/CreatePaymentIntent', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (data.error) {
+                var errorElement = document.getElementById('card-errors');
+                errorElement.textContent = data.error;
+                submitButton.disabled = false;
+            } else {
+                stripe.confirmCardPayment(data.clientSecret, {
+                    payment_method: {
+                        card: card,
+                        billing_details: {
+                            name: document.getElementById('Name').value
+                        }
+                    }
+                }).then(function(result) {
+                    if (result.error) {
+                        var errorElement = document.getElementById('card-errors');
+                        errorElement.textContent = result.error.message;
+                        submitButton.disabled = false;
+                    } else {
+                        if (result.paymentIntent.status === 'succeeded') {
+                            document.getElementById('paymentIntentId').value = result.paymentIntent.id;
+                            form.submit();
+                        }
+                    }
+                });
+            }
+        })
+        .catch(function(error) {
+            console.error('Error:', error);
+            submitButton.disabled = false;
+        });
+    });
+</script>

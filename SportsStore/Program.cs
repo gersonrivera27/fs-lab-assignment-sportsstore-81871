@@ -35,6 +35,9 @@ try
     builder.Services.AddIdentity<IdentityUser, IdentityRole>()
         .AddEntityFrameworkStores<AppIdentityDbContext>();
 
+    // Register IPaymentService
+    builder.Services.AddScoped<SportsStore.Infrastructure.IPaymentService, SportsStore.Infrastructure.StripePaymentService>();
+
     var app = builder.Build();
 
     if (app.Environment.IsProduction()) {
