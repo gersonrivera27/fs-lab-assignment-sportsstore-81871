@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using SportsStore.Models.ViewModels;
+using Serilog;
 
 namespace SportsStore.Controllers {
 
@@ -16,6 +17,7 @@ namespace SportsStore.Controllers {
         }
 
         public ViewResult Login(string returnUrl) {
+            Log.Information("Login page accessed. ReturnUrl: {ReturnUrl}", returnUrl);
             return View(new LoginModel {
                 ReturnUrl = returnUrl
             });
@@ -31,9 +33,11 @@ namespace SportsStore.Controllers {
                     await signInManager.SignOutAsync();
                     if ((await signInManager.PasswordSignInAsync(user,
                             loginModel.Password, false, false)).Succeeded) {
+                        Log.Information("User {Username} logged in successfully. Redirecting to {ReturnUrl}", loginModel.Name, loginModel.ReturnUrl ?? "/Admin");
                         return Redirect(loginModel?.ReturnUrl ?? "/Admin");
                     }
                 }
+                Log.Warning("Failed login attempt for username {Username}", loginModel.Name);
                 ModelState.AddModelError("", "Invalid name or password");
             }
             return View(loginModel);
@@ -41,6 +45,7 @@ namespace SportsStore.Controllers {
 
         [Authorize]
         public async Task<RedirectResult> Logout(string returnUrl = "/") {
+            Log.Information("User {Username} logged out", User.Identity?.Name);
             await signInManager.SignOutAsync();
             return Redirect(returnUrl);
         }
