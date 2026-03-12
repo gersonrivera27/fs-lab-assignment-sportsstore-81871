@@ -1,9 +1,12 @@
-﻿@model Order
+@model Order
 
 <h2>Check out now</h2>
 <p>Please enter your details, and we'll ship your goods right away!</p>
 
 <div asp-validation-summary="All" class="text-danger"></div>
+
+<!-- Payment status alert (hidden by default) -->
+<div id="payment-alert" class="alert d-none" role="alert"></div>
 
 <form asp-action="Checkout" method="post" id="payment-form">
     <h3>Ship to</h3>
@@ -48,7 +51,7 @@
         <!-- Used to display form errors. -->
         <div id="card-errors" role="alert" class="text-danger mt-2"></div>
     </div>
-    
+
     <input type="hidden" id="paymentIntentId" name="paymentIntentId" />
 
     <div class="text-center mt-3">
@@ -60,7 +63,7 @@
 <script>
     var stripe = Stripe('@ViewBag.StripePublishableKey');
     var elements = stripe.elements();
-    
+
     var style = {
         base: {
             color: '#32325d',
@@ -76,10 +79,10 @@
             iconColor: '#fa755a'
         }
     };
-    
+
     var card = elements.create('card', {style: style});
     card.mount('#card-element');
-    
+
     card.on('change', function(event) {
         var displayError = document.getElementById('card-errors');
         if (event.error) {
@@ -88,13 +91,27 @@
             displayError.textContent = '';
         }
     });
-    
+
+    function showAlert(message, type) {
+        var alertDiv = document.getElementById('payment-alert');
+        alertDiv.className = 'alert alert-' + type;
+        alertDiv.textContent = message;
+        alertDiv.classList.remove('d-none');
+    }
+
+    function hideAlert() {
+        var alertDiv = document.getElementById('payment-alert');
+        alertDiv.classList.add('d-none');
+    }
+
     var form = document.getElementById('payment-form');
     var submitButton = document.getElementById('submit-button');
 
     form.addEventListener('submit', function(event) {
         event.preventDefault();
         submitButton.disabled = true;
+        submitButton.value = 'Processing...';
+        hideAlert();
 
         fetch('/Order/CreatePaymentIntent', {
             method: 'POST',
@@ -103,13 +120,18 @@
             }
         })
         .then(function(response) {
+            if (!response.ok) {
+                return response.json().then(function(data) {
+                    throw new Error(data.error || 'Failed to create payment intent');
+                });
+            }
             return response.json();
         })
         .then(function(data) {
             if (data.error) {
-                var errorElement = document.getElementById('card-errors');
-                errorElement.textContent = data.error;
+                showAlert(data.error, 'danger');
                 submitButton.disabled = false;
+                submitButton.value = 'Complete Order';
             } else {
                 stripe.confirmCardPayment(data.clientSecret, {
                     payment_method: {
@@ -120,13 +142,49 @@
                     }
                 }).then(function(result) {
                     if (result.error) {
+                        // Payment failed - show error and log to server
                         var errorElement = document.getElementById('card-errors');
                         errorElement.textContent = result.error.message;
+                        showAlert('Payment failed: ' + result.error.message, 'danger');
                         submitButton.disabled = false;
+                        submitButton.value = 'Complete Order';
+
+                        // Log failed payment to server
+                        fetch('/Order/PaymentFailed', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                errorMessage: result.error.message,
+                                paymentIntentId: result.error.payment_intent ? result.error.payment_intent.id : null,
+                                declineCode: result.error.decline_code || 'N/A',
+                                customerName: document.getElementById('Name').value
+                            })
+                        });
                     } else {
                         if (result.paymentIntent.status === 'succeeded') {
+                            // Payment succeeded
+                            showAlert('Payment successful! Completing your order...', 'success');
                             document.getElementById('paymentIntentId').value = result.paymentIntent.id;
                             form.submit();
+                        } else if (result.paymentIntent.status === 'canceled') {
+                            // Payment cancelled
+                            showAlert('Payment was cancelled. Please try again.', 'warning');
+                            submitButton.disabled = false;
+                            submitButton.value = 'Complete Order';
+
+                            fetch('/Order/PaymentCancelled', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    paymentIntentId: result.paymentIntent.id,
+                                    customerName: document.getElementById('Name').value
+                                })
+                            });
+                        } else {
+                            // Other status (requires_action, processing, etc.)
+                            showAlert('Payment requires additional action. Status: ' + result.paymentIntent.status, 'warning');
+                            submitButton.disabled = false;
+                            submitButton.value = 'Complete Order';
                         }
                     }
                 });
@@ -134,7 +192,9 @@
         })
         .catch(function(error) {
             console.error('Error:', error);
+            showAlert('An error occurred: ' + error.message + '. Please try again.', 'danger');
             submitButton.disabled = false;
+            submitButton.value = 'Complete Order';
         });
     });
 </script>
