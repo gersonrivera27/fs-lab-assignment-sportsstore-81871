@@ -1,0 +1,34 @@
+@page "/account/register"
+@model SportsStore.Pages.Account.RegisterModel
+
+<div class="container mt-5" style="max-width: 480px;">
+    <h2 class="mb-4">Create account</h2>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+
+    <form method="post">
+        <div class="mb-3">
+            <label asp-for="Input.UserName" class="form-label"></label>
+            <input asp-for="Input.UserName" class="form-control" />
+            <span asp-validation-for="Input.UserName" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Input.Email" class="form-label"></label>
+            <input asp-for="Input.Email" class="form-control" />
+            <span asp-validation-for="Input.Email" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Input.Password" class="form-label"></label>
+            <input asp-for="Input.Password" class="form-control" />
+            <span asp-validation-for="Input.Password" class="text-danger"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Register</button>
+        <a class="btn btn-link" href="/account/login">Back to login</a>
+    </form>
+</div>

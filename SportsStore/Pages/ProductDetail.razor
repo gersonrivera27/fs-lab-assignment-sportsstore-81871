@@ -1,0 +1,80 @@
+@page "/product/{ProductId:long}"
+@inject IHttpClientFactory ClientFactory
+@inject Cart cart
+@inject NavigationManager NavigationManager
+
+@if (product == null)
+{
+    @if (error != null)
+    {
+        <p class="text-danger">@error</p>
+    }
+    else
+    {
+        <p><em>Loading product details...</em></p>
+    }
+}
+else
+{
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h4>@product.Name</h4>
+        </div>
+        <div class="card-body">
+            <h5 class="card-title">@product.Price.ToString("c")</h5>
+            <span class="badge bg-secondary mb-3">@product.Category</span>
+            
+            <p class="card-text">@product.Description</p>
+            <p class="text-muted"><small>Stock remaining: @product.StockQuantity</small></p>
+
+            <div class="mt-4">
+                <button class="btn btn-success" @onclick="AddToCart">
+                    <i class="fa fa-shopping-cart"></i> Add to Cart
+                </button>
+                <a class="btn btn-outline-secondary ms-2" href="/">Back to Products</a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public long ProductId { get; set; }
+
+    private ProductDto? product;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = ClientFactory.CreateClient("OrderApi");
+            var products = await client.GetFromJsonAsync<List<ProductDto>>("api/products");
+            product = products?.FirstOrDefault(p => p.ProductId == ProductId);
+            
+            if (product == null)
+            {
+                error = "Product not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = "Failed to load product details: " + ex.Message;
+        }
+    }
+
+    private void AddToCart()
+    {
+        if (product == null) return;
+        var p = new SportsStore.Models.Product 
+        { 
+            ProductID = product.ProductId, 
+            Name = product.Name, 
+            Price = product.Price, 
+            Description = product.Description, 
+            Category = product.Category 
+        };
+        cart.AddItem(p, 1);
+        NavigationManager.NavigateTo("/cart");
+    }
+}

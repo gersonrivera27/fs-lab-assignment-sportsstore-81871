@@ -1,0 +1,107 @@
+@page "/"
+@page "/{category}"
+@page "/Page{CurrentPage:int}"
+@page "/{category}/Page{CurrentPage:int}"
+@inject IHttpClientFactory ClientFactory
+@inject Cart cart
+@inject NavigationManager NavigationManager
+
+<!-- Cascading value for NavMenu -->
+<CascadingValue Value="@Category" Name="CurrentCategory">
+    @if (products == null)
+    {
+        <p><em>Loading products...</em></p>
+    }
+    else
+    {
+        @foreach (var p in FilteredProducts)
+        {
+            <div class="card card-outline-primary m-1 p-1">
+                <div class="bg-faded p-1">
+                    <h4>
+                        @p.Name
+                        <span class="badge rounded-pill bg-primary text-white" style="float:right">
+                            <small>@p.Price.ToString("c")</small>
+                        </span>
+                    </h4>
+                </div>
+                <div class="card-text p-1">@p.Description</div>
+                <div class="card-footer">
+                    <button class="btn btn-success btn-sm float-end" @onclick="() => AddToCart(p)">
+                        Add To Cart
+                    </button>
+                    <!-- Quantity input is omitted here for brevity, matching simple MVC view -->
+                </div>
+            </div>
+        }
+
+        <!-- Simple Pagination -->
+        @if (TotalPages > 1)
+        {
+            <div class="mt-2">
+                @for (int i = 1; i <= TotalPages; i++)
+                {
+                    <a href="@GetPageUrl(i)" class="btn btn-sm @(i == CurrentPage ? "btn-primary" : "btn-outline-primary")">@i</a>
+                }
+            </div>
+        }
+    }
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public string? Category { get; set; }
+
+    [Parameter]
+    public int CurrentPage { get; set; } = 1;
+
+    private int PageSize = 4;
+    private List<ProductDto>? products;
+    private IEnumerable<ProductDto> FilteredProducts => 
+        (products?.Where(p => Category == null || p.Category == Category) ?? Enumerable.Empty<ProductDto>())
+        .Skip((CurrentPage - 1) * PageSize)
+        .Take(PageSize);
+
+    private int TotalPages => 
+        (int)Math.Ceiling((decimal)(products?.Count(p => Category == null || p.Category == Category) ?? 0) / PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = ClientFactory.CreateClient("OrderApi");
+            products = await client.GetFromJsonAsync<List<ProductDto>>("api/products");
+        }
+        catch
+        {
+            // Fallback empty to prevent crash if offline
+            products = new List<ProductDto>(); 
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (CurrentPage <= 0) CurrentPage = 1;
+    }
+
+    private void AddToCart(ProductDto p)
+    {
+        // Add to cart local session
+        var product = new SportsStore.Models.Product 
+        { 
+            ProductID = p.ProductId, 
+            Name = p.Name, 
+            Price = p.Price, 
+            Description = p.Description, 
+            Category = p.Category 
+        };
+        cart.AddItem(product, 1);
+        NavigationManager.NavigateTo("/cart");
+    }
+
+    private string GetPageUrl(int pageIndex)
+    {
+        if (Category == null) return $"/Page{pageIndex}";
+        return $"/{Category}/Page{pageIndex}";
+    }
+}
