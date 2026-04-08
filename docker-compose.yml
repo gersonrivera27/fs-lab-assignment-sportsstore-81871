@@ -1,0 +1,86 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  order-api:
+    build:
+      context: .
+      dockerfile: OrderManagement.Api/Dockerfile
+    ports:
+      - "5001:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - OrderDb=Data Source=orders.db
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: Inventory.Service/Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: Payment.Service/Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  shipping-service:
+    build:
+      context: .
+      dockerfile: Shipping.Service/Dockerfile
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  sportsstore-portal:
+    build:
+      context: .
+      dockerfile: SportsStore/Dockerfile
+    ports:
+      - "5002:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - OrderApi__BaseUrl=http://order-api:80/
+      - ConnectionStrings__SportsStoreConnection=Data Source=SportsStore.db
+      - ConnectionStrings__IdentityConnection=Data Source=Identity.db
+    depends_on:
+      - order-api
+
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - order-api

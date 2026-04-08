@@ -1,87 +1,149 @@
-# SportsStore - Full Stack Development Assignment
+# Distributed Order Processing Platform — SportsStore
 
-## Student
-- **Name:** Gerson Rivera
-- **Student Number:** 81871
+This repository contains the upgraded **SportsStore** application (from standard MVC .NET to a fully distributed architecture using .NET 10). It demonstrates event-driven microservices processing orders asynchronously.
 
-## Overview
-Modernised SportsStore application upgraded from .NET 6 to .NET 8 with Stripe payment integration, Serilog structured logging (with SEQ ingestion), and GitHub Actions CI pipeline.
+The assignment delivery focuses on the distributed order workflow. Legacy Stripe artifacts from the earlier project remain in the repository, but the active checkout path for this solution uses the asynchronous RabbitMQ-based payment simulation service.
 
-## Upgrade Steps (.NET 6 → .NET 8)
-1. Updated `TargetFramework` from `net6.0` to `net8.0` in both `.csproj` files
-2. Updated all NuGet packages to .NET 8 compatible versions
-3. Replaced SQL Server with SQLite for cross-platform Mac compatibility
-4. Deleted old SQL Server migrations and created new SQLite migrations
-5. Removed `global.json` that pinned .NET 6 SDK
-6. Verified build (0 errors) and all 18 tests passing
+## Architecture 
 
-## Stripe Configuration
-1. Install Stripe.net package: `dotnet add package Stripe.net`
-2. Configure API keys using User Secrets (keys are NOT in source code):
-```bash
-cd SportsStore
-dotnet user-secrets init
-dotnet user-secrets set "Stripe:SecretKey" "sk_test_YOUR_KEY"
-dotnet user-secrets set "Stripe:PublishableKey" "pk_test_YOUR_KEY"
-```
-3. Payment flow: Cart → Checkout → Stripe PaymentIntent → Order confirmation
+The application is built using a **CQRS / Event-Driven Microservices** architecture with RabbitMQ.
 
-### Stripe Test Cards
-| Card Number | Scenario |
-|---|---|
-| `4242 4242 4242 4242` | Successful payment |
-| `4000 0000 0000 0002` | Card declined |
-| `4000 0000 0000 9995` | Insufficient funds |
-| `4000 0000 0000 0069` | Expired card |
+```mermaid
+graph TD
+    %% Define styles
+    classDef client fill:#3b82f6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef api fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    classDef worker fill:#8b5cf6,stroke:#fff,stroke-width:2px,color:#fff
+    classDef broker fill:#f59e0b,stroke:#fff,stroke-width:2px,color:#fff
+    classDef db fill:#475569,stroke:#fff,stroke-width:2px,color:#fff
 
-Use any future expiry date and any 3-digit CVC.
+    subgraph "Frontend Clients"
+        Blazor["Blazor Customer Portal\n(SportsStore)"]:::client
+        React["React Admin Dashboard\n(Vite/Node)"]:::client
+    end
 
-## Logging Setup
-- **Serilog** with three sinks: Console, Rolling File (`Logs/` directory), and SEQ
-- Configured via `appsettings.json` using `ReadFrom.Configuration`
-- Enriched with: LogContext, MachineName, EnvironmentName
-- Environment-specific log levels via `appsettings.Development.json` (Debug level in Development)
-- Structured logging throughout the application:
-  - **Application lifecycle**: startup, shutdown, fatal errors
-  - **Cart operations**: add product (ProductId, ProductName, Price), remove product, cart totals
-  - **Checkout flow**: cart items detail, payment intent creation, order confirmation
-  - **Stripe payments**: successful payments, failed payments (with decline codes), cancelled payments
-  - **Authentication**: login attempts (success/failure with username), logout events
-  - **HTTP requests**: via `UseSerilogRequestLogging()` middleware
+    subgraph "Core API Pattern (MediatR/CQRS)"
+        API["OrderManagement.Api\n(.NET 10 Web API)"]:::api
+        API_Commands["Commands (Write)"]:::api
+        API_Queries["Queries (Read)"]:::api
+    end
 
-### SEQ Setup (for structured log viewing)
-1. Install and run SEQ via Docker:
-```bash
-docker run --name seq -d --restart unless-stopped -e ACCEPT_EULA=Y -p 5341:80 datalust/seq
-```
-2. Open SEQ dashboard at `http://localhost:5341`
-3. SEQ is already configured in `appsettings.json` as a Serilog sink
-4. Run the application and structured logs will appear in SEQ automatically
-5. Use SEQ filters to search by properties like `ProductId`, `CustomerName`, `PaymentIntentId`, `StripeError`, etc.
+    subgraph "RabbitMQ Exchange"
+        RabbitMQ[("RabbitMQ Broker\n(Fanout Exchanges)")]:::broker
+    end
 
-## How to Run Locally
-```bash
-git clone https://github.com/gersonrivera27/fs-lab-assignment-sportsstore-81871.git
-cd fs-lab-assignment-sportsstore-81871
-dotnet restore
-dotnet build
-dotnet run --project SportsStore
-# Open http://localhost:5000
+    subgraph "Worker Services"
+        Inventory["Inventory.Service\n(.NET Worker)"]:::worker
+        Payment["Payment.Service\n(.NET Worker)"]:::worker
+        Shipping["Shipping.Service\n(.NET Worker)"]:::worker
+    end
+
+    SQLite[("Shared SQLite\nDatabases")]:::db
+
+    %% Relationships
+    Blazor -->|HTTP POST Checkout| API
+    React -->|HTTP GET Stats/Orders| API
+    
+    API --> API_Commands
+    API --> API_Queries
+    API_Commands --> SQLite
+    API_Queries --> SQLite
+    
+    API_Commands -->|Publish| RabbitMQ
+    RabbitMQ -->|Consume| Inventory
+    Inventory -->|Publish Checked| RabbitMQ
+    RabbitMQ -->|Consume| Payment
+    Payment -->|Publish Processed| RabbitMQ
+    RabbitMQ -->|Consume| Shipping
+    Shipping -->|Publish Dispatched| RabbitMQ
+    
+    RabbitMQ -->|Consumer Hook| API
 ```
 
-## CI Pipeline
-GitHub Actions workflow runs on push to main and pull requests:
-- Restores dependencies
-- Builds solution in Release mode
-- Runs all unit tests (18/18 passing)
+## Key Technologies
+- **.NET 10** (Preview)
+- **Blazor Server** (Customer Portal)
+- **React.js + Vite + TypeScript** (Admin Dashboard)
+- **MediatR** (CQRS pattern)
+- **RabbitMQ** (Message Broker)
+- **Serilog** (Structured Logging)
+- **AutoMapper** (DTO Mapping)
+- **EF Core + SQLite** (Storage)
+- **Docker Compose** (Container Orchestration)
 
-## Branch Naming Convention
-Branches follow the format: `gr-feature-description` (e.g., `gr-stripe-integration`)
+## Service Responsibilities
+- **SportsStore (Blazor Server)**: customer portal for browsing products, signing in, checkout, viewing previous orders, and tracking live order status.
+- **OrderManagement.Api**: central API entry point, CQRS orchestration layer, order persistence, status tracking, and RabbitMQ publisher/consumer integration.
+- **Inventory.Service**: validates and reserves stock, then emits inventory success or failure.
+- **Payment.Service**: simulates asynchronous payment approval or rejection.
+- **Shipping.Service**: creates shipment metadata and completes successful orders.
+- **admin-dashboard**: operational dashboard for order monitoring, filtering, failure investigation, and order detail review.
 
-## Technologies
-- ASP.NET Core 8.0
-- Entity Framework Core 8.0 with SQLite
-- Serilog structured logging (Console, File, SEQ sinks)
-- Stripe.net payment processing
-- xUnit + Moq for unit testing
-- GitHub Actions CI/CD
+## Event Workflow Lifecycle
+
+When a customer places an order from the Blazor portal:
+1.  **Order API** receives HTTP request → `CheckoutOrderCommand` creates order in DB as `Submitted`.
+2.  **Order API** publishes `Inventory.Check`.
+3.  **Inventory Worker** consumes `Inventory.Check` → simulates stock validation → publishes `Inventory.Completed` (Success/Fail).
+4.  **Order API** consumes `Inventory.Completed` → updates DB. If Success, publishes `Payment.Requested`.
+5.  **Payment Worker** consumes `Payment.Requested` → simulates payment gateway → publishes `Payment.Processed`.
+6.  **Order API** consumes `Payment.Processed` → updates DB. If Success, publishes `Shipping.Requested`.
+7.  **Shipping Worker** consumes `Shipping.Requested` → generates dispatch details → publishes `Shipping.Created`.
+8.  **Order API** marks order as `Completed`.
+
+If any step fails, the API marks the order as `Failed` with the reason.
+
+## Frontend Features
+
+### Customer Portal
+- Product listing and product details
+- Shopping cart and checkout
+- Login/register with ASP.NET Core Identity
+- My Orders scoped to the authenticated customer
+- Live order tracking timeline
+
+### Admin Dashboard
+- Dashboard summary from live API metrics
+- Orders table with status filters
+- Failed orders view
+- Order detail page with inventory, payment, shipping, correlation id, and workflow timeline
+
+## How to Run
+
+### Prerequisite
+You need Docker and Docker Compose installed.
+
+### Option 1: Docker Compose (All-in-one locally)
+
+To run the entire distributed system (API, 3 Worker Services, RabbitMQ, Blazor App, and React Dashboard):
+
+```bash
+docker compose up --build
+```
+
+Access the applications at:
+*   **Blazor Customer Portal**: `http://localhost:5002`
+*   **React Admin Dashboard**: `http://localhost:3000`
+*   **Order Management API**: `http://localhost:5001`
+*   **RabbitMQ Management UI**: `http://localhost:15672` (guest/guest)
+
+Seeded customer/admin account for demo:
+* **Username**: `Admin`
+* **Password**: `Secret123$`
+
+### Option 2: Running via IDE / Dotnet CLI
+
+If you want to debug individual services:
+1. Bring up RabbitMQ: `docker run -d -p 5672:5672 -p 15672:15672 rabbitmq:3-management`
+2. Start the API: `cd OrderManagement.Api && dotnet run`
+3. Start Workers: `cd Inventory.Service && dotnet run`, `cd Payment.Service && dotnet run`, `cd Shipping.Service && dotnet run`
+4. Start the Blazor portal: `cd SportsStore && dotnet run`
+5. Run Dashboard: `cd admin-dashboard && npm run dev`
+
+## CI/CD 
+A GitHub actions workflow is configured in `.github/workflows/ci.yml`. It builds all .NET 10 code, runs MediatR unit tests tracking trx coverage results, and verifies the Node React build.
+
+## Assumptions and Limitations
+- SQLite is used to keep the setup simple and portable for local development and assessment.
+- Payment processing is intentionally simulated asynchronously by `Payment.Service`; no external gateway is required for the assignment workflow.
+- The admin dashboard uses live operational data from the API for summaries, filters, failures, and order detail views.

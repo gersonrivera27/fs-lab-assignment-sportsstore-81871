@@ -1,0 +1,82 @@
+@page "/myorders"
+@attribute [Authorize]
+@inject IHttpClientFactory ClientFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h2>My Orders</h2>
+
+@if (orders == null)
+{
+    <p><em>Loading your orders...</em></p>
+}
+else if (orders.Count == 0)
+{
+    <p>You have no past orders.</p>
+}
+else
+{
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order.OrderId</td>
+                    <td>@order.CreatedAt.ToString("MMM dd, yyyy")</td>
+                    <td>@order.TotalAmount.ToString("c")</td>
+                    <td><span class="badge @GetStatusClass(order.Status)">@order.Status</span></td>
+                    <td>
+                        <a class="btn btn-sm btn-info" href="/track/@order.OrderId">Track</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<OrderDto>? orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var customerId = user.FindFirst(c => c.Type.EndsWith("/nameidentifier"))?.Value
+                ?? user.FindFirst("sub")?.Value
+                ?? user.Identity?.Name;
+
+            if (string.IsNullOrWhiteSpace(customerId))
+            {
+                orders = new List<OrderDto>();
+                return;
+            }
+
+            var client = ClientFactory.CreateClient("OrderApi");
+            orders = await client.GetFromJsonAsync<List<OrderDto>>($"api/customers/{customerId}/orders");
+        }
+        catch
+        {
+            orders = new List<OrderDto>();
+        }
+    }
+
+    private string GetStatusClass(string status)
+    {
+        return status switch
+        {
+            "Completed" => "bg-success",
+            "Failed" or "Cancelled" or "PaymentFailed" or "InventoryFailed" => "bg-danger",
+            _ => "bg-warning text-dark"
+        };
+    }
+}

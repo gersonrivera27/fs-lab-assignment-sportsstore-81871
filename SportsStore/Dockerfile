@@ -1,10 +1,14 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:6.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+WORKDIR /src
+COPY ["SportsStore/SportsStore.csproj", "SportsStore/"]
+COPY ["Shared.Contracts/Shared.Contracts.csproj", "Shared.Contracts/"]
+RUN dotnet restore "SportsStore/SportsStore.csproj"
+COPY . .
+WORKDIR "/src/SportsStore"
+RUN dotnet publish "SportsStore.csproj" -c Release -o /app/publish
 
-COPY /bin/Release/net6.0/publish/ SportsStore/
-
-ENV ASPNETCORE_ENVIRONMENT Production
-ENV Logging__Console__FormatterName=Simple
-
-EXPOSE 5000
-WORKDIR /SportsStore
-ENTRYPOINT ["dotnet", "SportsStore.dll",  "--urls=http://0.0.0.0:5000"]
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS final
+WORKDIR /app
+EXPOSE 80
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "SportsStore.dll"]

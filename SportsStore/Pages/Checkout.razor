@@ -1,0 +1,138 @@
+@page "/checkout"
+@attribute [Authorize]
+@inject IHttpClientFactory ClientFactory
+@inject Cart cart
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h2>Check out now</h2>
+<p>Please enter your details, and we'll ship your goods right away!</p>
+
+@if (cart.Lines.Count() == 0)
+{
+    <p>Sorry, your cart is empty!</p>
+}
+else if (IsSubmitting)
+{
+    <p>Submitting your order...</p>
+}
+else if (ErrorMessage != null)
+{
+    <div class="alert alert-danger">@ErrorMessage</div>
+}
+else
+{
+    <EditForm Model="OrderModel" OnValidSubmit="HandleCheckout">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <h3>Ship to</h3>
+        <div class="form-group">
+            <label>Name:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Name" />
+        </div>
+
+        <h3>Address</h3>
+        <div class="form-group">
+            <label>Line 1:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Line1" />
+        </div>
+        <div class="form-group">
+            <label>Line 2:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Line2" />
+        </div>
+        <div class="form-group">
+            <label>Line 3:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Line3" />
+        </div>
+        <div class="form-group">
+            <label>City:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.City" />
+        </div>
+        <div class="form-group">
+            <label>State:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.State" />
+        </div>
+        <div class="form-group">
+            <label>Zip:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Zip" />
+        </div>
+        <div class="form-group">
+            <label>Country:</label>
+            <InputText class="form-control" @bind-Value="OrderModel.Country" />
+        </div>
+
+        <h3>Options</h3>
+        <div class="checkbox">
+            <label>
+                <InputCheckbox @bind-Value="OrderModel.GiftWrap" /> Gift wrap these items
+            </label>
+        </div>
+
+        <div class="text-center mt-3">
+            <button class="btn btn-primary" type="submit">Complete Order</button>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private SportsStore.Models.Order OrderModel = new SportsStore.Models.Order();
+    private bool IsSubmitting = false;
+    private string? ErrorMessage;
+
+    private async Task HandleCheckout()
+    {
+        IsSubmitting = true;
+        ErrorMessage = null;
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var customerId = user.FindFirst(c => c.Type.EndsWith("/nameidentifier"))?.Value
+                ?? user.FindFirst("sub")?.Value
+                ?? user.Identity?.Name;
+            var customerName = user.Identity?.Name ?? OrderModel.Name ?? "Unknown";
+
+            if (string.IsNullOrWhiteSpace(customerId))
+            {
+                ErrorMessage = "You must be signed in to place an order.";
+                IsSubmitting = false;
+                return;
+            }
+
+            var request = new CheckoutRequestDto(
+                CustomerId: customerId,
+                CustomerName: customerName,
+                ShippingAddress: $"{OrderModel.Line1}, {OrderModel.City}, {OrderModel.State}, {OrderModel.Zip}, {OrderModel.Country}",
+                Items: cart.Lines.Select(l => new CheckoutItemDto(l.Product.ProductID ?? 0, l.Quantity)).ToList()
+            );
+
+            var client = ClientFactory.CreateClient("OrderApi");
+            var response = await client.PostAsJsonAsync("api/orders/checkout", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CheckoutResponseDto>();
+                cart.Clear();
+                if (result != null)
+                {
+                    NavigationManager.NavigateTo($"/completed/{result.OrderId}");
+                }
+                else
+                {
+                    NavigationManager.NavigateTo("/completed/unknown");
+                }
+            }
+            else
+            {
+                ErrorMessage = $"Failed to submit order. Plase try again. {(await response.Content.ReadAsStringAsync())}";
+                IsSubmitting = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error communicating with the backend: {ex.Message}";
+            IsSubmitting = false;
+        }
+    }
+}

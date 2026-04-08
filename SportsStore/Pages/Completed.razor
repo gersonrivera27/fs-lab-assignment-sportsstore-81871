@@ -1,0 +1,23 @@
+@page "/completed/{OrderId:guid}"
+@page "/completed/{OrderStr}"
+
+<div class="text-center">
+    <h2>Thanks!</h2>
+    <p>Thanks for placing your order.</p>
+    @if (!string.IsNullOrEmpty(OrderId.ToString()) || !string.IsNullOrEmpty(OrderStr))
+    {
+        <p>Your order ID is: <strong>@(OrderId != Guid.Empty ? OrderId.ToString() : OrderStr)</strong></p>
+        <p>You can track the state of your order live below:</p>
+        <a class="btn btn-primary mt-2" href="/track/@(OrderId != Guid.Empty ? OrderId.ToString() : OrderStr)">Track Order</a>
+    }
+    <p>We'll ship your goods as soon as possible.</p>
+    <a class="btn btn-outline-primary mt-3" href="/">Return to Store</a>
+</div>
+
+@code {
+    [Parameter]
+    public Guid OrderId { get; set; }
+
+    [Parameter]
+    public string? OrderStr { get; set; }
+}

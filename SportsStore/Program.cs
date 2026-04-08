@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SportsStore.Models;
 using Microsoft.AspNetCore.Identity;
 using Serilog;
+using Microsoft.AspNetCore.Components.Authorization;
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(new ConfigurationBuilder()
@@ -15,8 +16,7 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
-
-    builder.Services.AddControllersWithViews();
+    
     builder.Services.AddDbContext<StoreDbContext>(opts => {
         opts.UseSqlite(
             builder.Configuration["ConnectionStrings:SportsStoreConnection"]);
@@ -29,11 +29,24 @@ try
     builder.Services.AddScoped<Cart>(sp => SessionCart.GetCart(sp));
     builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
     builder.Services.AddServerSideBlazor();
+    builder.Services.AddCascadingAuthenticationState();
+    
+    // Add HttpClient to call OrderManagement.Api
+    builder.Services.AddHttpClient("OrderApi", client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["OrderApi:BaseUrl"] ?? "http://localhost:5001/");
+    });
+
     builder.Services.AddDbContext<AppIdentityDbContext>(options =>
         options.UseSqlite(
             builder.Configuration["ConnectionStrings:IdentityConnection"]));
     builder.Services.AddIdentity<IdentityUser, IdentityRole>()
         .AddEntityFrameworkStores<AppIdentityDbContext>();
+    builder.Services.ConfigureApplicationCookie(options =>
+    {
+        options.LoginPath = "/account/login";
+        options.LogoutPath = "/account/logout";
+    });
 
     // Register IPaymentService
     builder.Services.AddScoped<SportsStore.Infrastructure.IPaymentService, SportsStore.Infrastructure.StripePaymentService>();
@@ -56,21 +69,9 @@ try
     app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();
-
-    app.MapControllerRoute("catpage",
-        "{category}/Page{productPage:int}",
-        new { Controller = "Home", action = "Index" });
-    app.MapControllerRoute("page", "Page{productPage:int}",
-        new { Controller = "Home", action = "Index", productPage = 1 });
-    app.MapControllerRoute("category", "{category}",
-        new { Controller = "Home", action = "Index", productPage = 1 });
-    app.MapControllerRoute("pagination",
-        "Products/Page{productPage}",
-        new { Controller = "Home", action = "Index", productPage = 1 });
-    app.MapDefaultControllerRoute();
     app.MapRazorPages();
     app.MapBlazorHub();
-    app.MapFallbackToPage("/admin/{*catchall}", "/Admin/Index");
+    app.MapFallbackToPage("/_Host");
 
     SeedData.EnsurePopulated(app);
     IdentitySeedData.EnsurePopulated(app);

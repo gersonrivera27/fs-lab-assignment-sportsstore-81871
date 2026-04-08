@@ -1,0 +1,94 @@
+@page "/track/{OrderId:guid}"
+@inject IHttpClientFactory ClientFactory
+@implements IDisposable
+
+<h2>Order Tracking: @OrderId</h2>
+
+@if (status == null)
+{
+    <p>Loading order status...</p>
+}
+else
+{
+    <div class="card mt-3">
+        <div class="card-header bg-primary text-white">
+            <h4>Current Status: @status.Status</h4>
+        </div>
+        <div class="card-body">
+            @if (status.ShipmentReference != null)
+            {
+                <p><strong>Shipment Reference:</strong> @status.ShipmentReference</p>
+                <p><strong>Shipped At:</strong> @status.LastUpdated.ToString("f")</p>
+            }
+            @if (status.FailureReason != null)
+            {
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> @status.FailureReason
+                </div>
+            }
+
+            <hr />
+            <h5>History Timeline</h5>
+            <ul class="list-group">
+                @foreach (var history in status.History)
+                {
+                    <li class="list-group-item">
+                        <strong>@history.Timestamp.ToString("t"):</strong> @history.Status
+                        @if (history.Notes != null)
+                        {
+                            <span class="text-muted ms-2">- @history.Notes</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid OrderId { get; set; }
+
+    private OrderStatusDto? status;
+    private System.Threading.Timer? pollingTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatus();
+
+        // Poll every 3 seconds for updates
+        pollingTimer = new System.Threading.Timer(async (state) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                if (status != null && (status.Status == "Completed" || status.Status == "Failed" || status.Status == "Cancelled"))
+                {
+                    pollingTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+                }
+                else
+                {
+                    await LoadStatus();
+                    StateHasChanged();
+                }
+            });
+        }, null, 3000, 3000);
+    }
+
+    private async Task LoadStatus()
+    {
+        try
+        {
+            var client = ClientFactory.CreateClient("OrderApi");
+            status = await client.GetFromJsonAsync<OrderStatusDto>($"api/orders/{OrderId}/status");
+        }
+        catch
+        {
+            // Ignore polling errors
+        }
+    }
+
+    public void Dispose()
+    {
+        pollingTimer?.Dispose();
+    }
+}

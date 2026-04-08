@@ -1,0 +1,53 @@
+@inject IHttpClientFactory ClientFactory
+
+<div class="d-grid gap-2">
+    <a class="btn btn-outline-secondary @GetClass(null)" href="/">Home</a>
+    @if (categories != null)
+    {
+        @foreach (var category in categories)
+        {
+            <a class="btn btn-outline-secondary @GetClass(category)" href="/@category">
+                @category
+            </a>
+        }
+    }
+    <hr />
+    <AuthorizeView>
+        <Authorized>
+            <a class="btn btn-outline-info" href="/myorders">My Orders</a>
+            <a class="btn btn-outline-primary" href="/checkout">Checkout</a>
+        </Authorized>
+        <NotAuthorized>
+            <a class="btn btn-outline-primary" href="/account/login">Login To Checkout</a>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private List<string>? categories;
+
+    // We can extract a current category property matching the route
+    [CascadingParameter(Name = "CurrentCategory")]
+    public string? CurrentCategory { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = ClientFactory.CreateClient("OrderApi");
+            var products = await client.GetFromJsonAsync<List<ProductDto>>("api/products");
+            if (products != null)
+            {
+                categories = products.Select(p => p.Category).Distinct().OrderBy(c => c).ToList();
+            }
+        }
+        catch
+        {
+            // Fallback for development if API is offline
+            categories = new List<string> { "Watersports", "Soccer", "Chess" }; 
+        }
+    }
+
+    private string GetClass(string? category) =>
+        category == CurrentCategory ? "btn-secondary text-white" : "btn-outline-secondary";
+}

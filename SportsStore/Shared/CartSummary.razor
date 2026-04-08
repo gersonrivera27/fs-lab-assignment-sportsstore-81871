@@ -1,0 +1,26 @@
+@inject Cart cart
+@using SportsStore.Models
+@implements IDisposable
+
+@if (cart.Lines.Count() > 0)
+{
+    <small class="navbar-text">
+        <b>Your cart:</b>
+        @cart.Lines.Sum(x => x.Quantity) item(s)
+        @cart.ComputeTotalValue().ToString("c")
+    </small>
+}
+<a class="btn btn-sm btn-secondary navbar-btn" href="/cart">
+    <i class="fa fa-shopping-cart"></i>
+</a>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // For Blazor server, we might need a state container to force re-render if the cart changes from another component
+    }
+
+    public void Dispose()
+    {
+    }
+}
